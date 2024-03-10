@@ -34,7 +34,7 @@ fn decode_bencoded_value_r(encoded_value: &str) -> (serde_json::Value,&str) {
         //we need to call this function until we get an error
         let mut vec = Vec::new();
         let mut current_str = &encoded_value[1..];
-        if encoded_value.chars().next().unwrap() == 'e'{
+        if current_str.chars().next().unwrap() == 'e'{
             return (serde_json::Value::Array(vec),""); 
         }
         //recursively call  until string exhausted.
