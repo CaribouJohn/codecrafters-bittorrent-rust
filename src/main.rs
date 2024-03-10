@@ -58,7 +58,7 @@ fn decode_bencoded_value_r(encoded_value: &str) -> (serde_json::Value,&str) {
 
 
 fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
-    let (v,remainder) = decode_bencoded_value_r(encoded_value);
+    let (v,_) = decode_bencoded_value_r(encoded_value);
     v
 }
 
