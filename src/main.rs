@@ -34,13 +34,13 @@ fn decode_bencoded_value_r(encoded_value: &str) -> (serde_json::Value,&str) {
         //we need to call this function until we get an error
         let mut vec = Vec::new();
         let mut current_str = &encoded_value[1..];
-        println!("remaining: '{}'[{}]",current_str,current_str.len() );
+        //println!("remaining: '{}'[{}]",current_str,current_str.len() );
         if current_str.chars().next().unwrap() == 'e'{
             return (serde_json::Value::Array(vec),""); 
         }
         //recursively call  until string exhausted.
         while current_str.len() > 0 {
-            println!("remaining: '{}'[{}]",current_str,current_str.len() );
+            //println!("remaining: '{}'[{}]",current_str,current_str.len() );
             let (v,remaining) = decode_bencoded_value_r(current_str);
             //add element into vector for list.
             vec.push(v);
