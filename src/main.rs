@@ -1,6 +1,6 @@
 //use hex::encode;
 use serde_json::{self, Map};
-use std::{collections::HashMap, env};
+use std::env;
 
 // Available if you need it!
 // use serde_bencode
