@@ -1,4 +1,4 @@
-use hex::encode;
+//use hex::encode;
 use serde_json;
 use std::env;
 
@@ -11,7 +11,7 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
 
     if encoded_value.chars().next().unwrap().is_digit(10) {
         // Example: "5:hello" -> "hello"
-        let colon_index = encoded_value.find('i').unwrap();
+        let colon_index = encoded_value.find(':').unwrap();
         let number_string = &encoded_value[..colon_index];
         let number = number_string.parse::<i64>().unwrap();
         let string = &encoded_value[colon_index + 1..colon_index + 1 + number as usize];
@@ -19,10 +19,13 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     } 
     else if encoded_value.chars().next().unwrap() == 'i'
     {
-        let e_index = encoded_value.find('e').unwrap();
-        let number_string = &encoded_value[1..e_index];
-        let number = number_string.parse().unwrap(); 
-        return serde_json::Value::Number(number);
+        if let Some(e_index) = encoded_value.find('e'){
+            let number_string = &encoded_value[1..e_index];
+            if let Ok(number) = number_string.parse() {
+                return serde_json::Value::Number(number);
+            } 
+        } 
+        panic!("encoded integer invalid ({encoded_value})")
     } 
     else
     {
