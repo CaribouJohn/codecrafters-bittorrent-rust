@@ -13,7 +13,7 @@ fn extract_string(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
     let number = number_string.parse::<i64>().unwrap();
     let end_point = colon_index + 1 + number as usize;
     let string = &encoded_value[colon_index + 1..end_point];
-    return (Some(string.into()), &encoded_value[end_point..]);
+    return (Some(serde_json::Value::String(string.to_string())), &encoded_value[end_point..]);
 }
 
 fn extract_number(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
@@ -21,7 +21,7 @@ fn extract_number(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
     if let Some(e_index) = encoded_value.find('e') {
         let number_string = &encoded_value[1..e_index];
         if let Ok(number) = number_string.parse(){
-            return (Some(number), &encoded_value[e_index + 1..]);
+            return (Some(serde_json::Value::Number(number)), &encoded_value[e_index + 1..]);
         }
     }
     panic!("encoded integer invalid ({encoded_value})")
@@ -36,7 +36,7 @@ fn extract_list(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
         //elements
         let mut current_str = &encoded_value[start_index + 1..];
         eprintln!("begin processing elements  {} ", current_str);
-        let mut vec = Vec::new();
+        let mut vec = vec![];
         let mut keep_processing = true;
         while keep_processing {
             match decode_bencoded_value_r(&current_str) {
@@ -57,7 +57,7 @@ fn extract_list(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
                 }
             }
         }
-        return (Some( serde_json::json!(vec) ), current_str);
+        return (Some( serde_json::Value::Array(vec) ), current_str);
     }
     panic!("encoded list invalid ({encoded_value})")
 }
@@ -78,17 +78,22 @@ fn extract_dictionary(encoded_value: &str) -> (Option<serde_json::Value>, &str) 
                 match extract_string(current_str) {
                     (Some(key), remainder) => {
                         eprintln!("key  {} / remainder '{}' ", key.to_string(), remainder);
+                        let key = key.as_str().expect("dodgy key???");
                         match decode_bencoded_value_r(&remainder) {
                             (Some(v), remaining) => {
                                 //add element into vector for list.
                                 eprintln!(
                                     "adding {}:{} , remaining: '{}'[{}]",
                                     key.to_string(),
-                                    v.to_string(),
+                                    v,
                                     remaining,
                                     remaining.len()
                                 );
-                                map.insert(key.to_string(), v);
+                                
+                                match v.as_str() {
+                                    Some(s) => map.insert(key.to_string(), s.into()),
+                                    None => map.insert(key.to_string(), v),
+                                };
                                 current_str = remaining
                             }
                             (None, remaining) => {
@@ -105,7 +110,7 @@ fn extract_dictionary(encoded_value: &str) -> (Option<serde_json::Value>, &str) 
                 current_str = &current_str[1..];
             }
         }
-        return (Some(serde_json::json!(map)), &current_str);
+        return (Some(serde_json::Value::Object(map)), &current_str);
     }
     panic!("encoded dictionary invalid ({encoded_value})")
 }
@@ -139,7 +144,7 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     // basically we have one item being encoded in the example so
     // at the top level I can return just the value
     match decode_bencoded_value_r(encoded_value) {
-        (Some(v), _) => serde_json::json!(v),
+        (Some(v), _) => v,
         (None, _) => panic!("Got none why!!!"),
     }
 }
