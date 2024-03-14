@@ -195,6 +195,16 @@ fn main() {
         let h = hex::encode(h);
         println!("Tracker URL: {}\nLength: {}", torrent.announce, torrent.info.length);
         println!("Info Hash: {}", h);
+        println!("Piece Length: {}", torrent.info.plen);
+        let pieces = torrent.info.pieces;
+        println!("Piece Hashes:");
+        for chunk in pieces.chunks(torrent.info.plen) {
+            let mut chunk_hasher = sha1::Sha1::new();
+            chunk_hasher.update(&chunk);
+            let h = chunk_hasher.finalize();
+            let h = hex::encode(h);
+            println!("{}", h);
+        }
     } else {
         println!("unknown command: {}", args[1])
     }
