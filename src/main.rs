@@ -2,7 +2,7 @@
 use serde::{Serialize, Deserialize};
 use serde_json::{self, Map};
 use std::env;
-
+use sha1::{self, Digest};
 // Available if you need it!
 // use serde_bencode
 
@@ -187,7 +187,14 @@ fn main() {
         let path = &args[2];
         let encoded_contents = std::fs::read(path).expect("failed to read");
         let torrent: Torrent = serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
+        //let info = torrent.info;
+        let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(&encoded_info);
+        let h = hasher.finalize();
+        let h = hex::encode(h);
         println!("Tracker URL: {}\nLength: {}", torrent.announce, torrent.info.length);
+        println!("Hash: {}", h);
     } else {
         println!("unknown command: {}", args[1])
     }
