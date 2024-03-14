@@ -1,4 +1,5 @@
 //use hex::encode;
+use serde::{Serialize, Deserialize};
 use serde_json::{self, Map};
 use std::env;
 
@@ -13,15 +14,21 @@ fn extract_string(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
     let number = number_string.parse::<i64>().unwrap();
     let end_point = colon_index + 1 + number as usize;
     let string = &encoded_value[colon_index + 1..end_point];
-    return (Some(serde_json::Value::String(string.to_string())), &encoded_value[end_point..]);
+    return (
+        Some(serde_json::Value::String(string.to_string())),
+        &encoded_value[end_point..],
+    );
 }
 
 fn extract_number(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
     eprintln!("processing number {} ", encoded_value);
     if let Some(e_index) = encoded_value.find('e') {
         let number_string = &encoded_value[1..e_index];
-        if let Ok(number) = number_string.parse(){
-            return (Some(serde_json::Value::Number(number)), &encoded_value[e_index + 1..]);
+        if let Ok(number) = number_string.parse() {
+            return (
+                Some(serde_json::Value::Number(number)),
+                &encoded_value[e_index + 1..],
+            );
         }
     }
     panic!("encoded integer invalid ({encoded_value})")
@@ -57,7 +64,7 @@ fn extract_list(encoded_value: &str) -> (Option<serde_json::Value>, &str) {
                 }
             }
         }
-        return (Some( serde_json::Value::Array(vec) ), current_str);
+        return (Some(serde_json::Value::Array(vec)), current_str);
     }
     panic!("encoded list invalid ({encoded_value})")
 }
@@ -69,7 +76,7 @@ fn extract_dictionary(encoded_value: &str) -> (Option<serde_json::Value>, &str) 
         //then recurse - skip past the 'd'
         let mut current_str = &encoded_value[start_index + 1..];
         eprintln!("begin processing map elements  {} ", current_str);
-        let mut map= Map::new();
+        let mut map = Map::new();
         //again we will try toprocess an 'e' when we reach the end of the
         //map (like list), this returns None and the remaining string
         let mut keep_processing = true;
@@ -89,7 +96,7 @@ fn extract_dictionary(encoded_value: &str) -> (Option<serde_json::Value>, &str) 
                                     remaining,
                                     remaining.len()
                                 );
-                                
+
                                 match v.as_str() {
                                     Some(s) => map.insert(key.to_string(), s.into()),
                                     None => map.insert(key.to_string(), v),
@@ -149,6 +156,24 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct Torrent {
+    announce : String,
+    info : Info
+}
+
+#[derive(Serialize, Deserialize)]
+struct Info {
+    length : usize,
+    name: String,
+    #[serde(rename = "piece length")]
+    plen: usize,
+    #[serde(with = "serde_bytes")]
+    pieces: Vec<u8>
+}
+
+
+
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -158,6 +183,11 @@ fn main() {
         let encoded_value = &args[2];
         let decoded_value = decode_bencoded_value(encoded_value);
         println!("{}", decoded_value.to_string());
+    } else if command == "info" {
+        let path = &args[2];
+        let encoded_contents = std::fs::read(path).expect("failed to read");
+        let torrent: Torrent = serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
+        println!("Tracker URL: {}\nLength: {}", torrent.announce, torrent.info.length);
     } else {
         println!("unknown command: {}", args[1])
     }
