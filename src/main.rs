@@ -198,11 +198,8 @@ fn main() {
         println!("Piece Length: {}", torrent.info.plen);
         let pieces = torrent.info.pieces;
         println!("Piece Hashes:");
-        for chunk in pieces.chunks(torrent.info.plen) {
-            let mut chunk_hasher = sha1::Sha1::new();
-            chunk_hasher.update(&chunk);
-            let h = chunk_hasher.finalize();
-            let h = hex::encode(h);
+        for chunk in pieces.chunks(20) {
+            let h = hex::encode(chunk);
             println!("{}", h);
         }
     } else {
