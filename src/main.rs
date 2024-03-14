@@ -194,7 +194,7 @@ fn main() {
         let h = hasher.finalize();
         let h = hex::encode(h);
         println!("Tracker URL: {}\nLength: {}", torrent.announce, torrent.info.length);
-        println!("Hash: {}", h);
+        println!("Info Hash: {}", h);
     } else {
         println!("unknown command: {}", args[1])
     }
