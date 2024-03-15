@@ -3,6 +3,9 @@ use serde::{Serialize, Deserialize};
 use serde_json::{self, Map};
 use std::env;
 use sha1::{self, Digest};
+use reqwest;
+use serde_urlencoded;
+
 // Available if you need it!
 // use serde_bencode
 
@@ -172,7 +175,28 @@ struct Info {
     pieces: Vec<u8>
 }
 
+#[derive(Serialize, Deserialize,Debug)]
+struct Tracker {
+    complete: u32,
+    incomplete: u32,
+    interval: u32,
+    #[serde(rename = "min interval")]
+    min_interval: u32,
+    #[serde(with = "serde_bytes")]    
+    peers: Vec<u8>
+}
 
+
+
+
+fn urlencode(t: &[u8]) -> String {
+    let mut encoded = String::new();
+    for &byte in t {
+        encoded.push('%');
+        encoded.push_str(&hex::encode(&[byte]));
+    }
+    encoded
+}
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
@@ -202,6 +226,56 @@ fn main() {
             let h = hex::encode(chunk);
             println!("{}", h);
         }
+    } else if command == "peers" {
+        //make a request to the announce url 
+        let path = &args[2];
+        let encoded_contents = std::fs::read(path).expect("failed to read");
+        let torrent: Torrent = serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
+
+        let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(&encoded_info);
+        let ih = hasher.finalize();
+
+        let params = [
+            ("peer_id".to_owned(),"00112233445566778899".to_owned()),
+            ("port".to_owned(),"6881".to_owned()),
+            ("uploaded".to_owned(),"0".to_owned()),
+            ("downloaded".to_owned(),"0".to_owned()),
+            ("left".to_owned(),torrent.info.length.to_string()),
+            ("compact".to_owned(), "1".to_owned())
+        ];
+        let params_encoded = serde_urlencoded::to_string(params).ok().unwrap();
+        let url = format!(
+            "{}?{}&info_hash={}",
+            torrent.announce,
+            params_encoded,
+            &urlencode(&ih.as_slice())
+        );
+
+        if let Ok(res) = reqwest::blocking::get(url)
+        {
+            println!("Status: {}", res.status());
+            println!("Headers:\n{:#?}", res.headers());
+            let body = res.bytes().ok().unwrap();//text().ok().unwrap();
+            //eprintln!("Body [{}]:\n{:?}", body.len(), body);
+
+            let tracker: Tracker = match serde_bencode::from_bytes(&body) {
+                Ok(op) => op,
+                Err(e) => panic!("{:?}",e),
+            };
+            for chunk in tracker.peers.chunks(6) {
+                let mut port = (chunk[4]as u16) << 8;
+                port += chunk[5] as u16;
+                println!("Peer ip: {}.{}.{}.{}:{}",  chunk[0],chunk[1],chunk[2],chunk[3],port);
+                //println!("Peer port: {:?}",  get_peer_port(&chunk[4..]));
+            }
+            //eprintln!("Tracker {:?}",  tracker);
+        } 
+
+
+    
+
     } else {
         println!("unknown command: {}", args[1])
     }
