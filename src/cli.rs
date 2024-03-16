@@ -1,3 +1,4 @@
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -14,6 +15,10 @@ pub enum Commands {
     Decode { encoded_value:String },
     Info { path:String },
     Peers {path:String },
-    Handshake {path:String },
+    Handshake {
+        path:String,
+        #[clap(value_delimiter = ':')]
+        ip_and_port : Vec<String> 
+    },
     
 }
