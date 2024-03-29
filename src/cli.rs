@@ -20,5 +20,13 @@ pub enum Commands {
         #[clap(value_delimiter = ':')]
         ip_and_port : Vec<String> 
     },
+    #[clap(name = "download_piece")]
+    DownloadPiece {
+        #[arg(short, long)]
+        output:String,
+        path:String,
+        index:usize,
+    },
+
     
 }

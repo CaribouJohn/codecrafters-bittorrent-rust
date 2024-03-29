@@ -30,14 +30,8 @@ fn main() {
         }
         cli::Commands::Info { path } => {
             let encoded_contents = std::fs::read(path).expect("failed to read");
-            let torrent: data::Torrent =
-                serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
-            //let info = torrent.info;
-            let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(&encoded_info);
-            let h = hasher.finalize();
-            let h = hex::encode(h);
+            let (torrent,ih) = get_torrent_and_info_hash(encoded_contents);
+            let h = hex::encode(ih);
             println!(
                 "Tracker URL: {}\nLength: {}",
                 torrent.announce, torrent.info.length
@@ -53,14 +47,7 @@ fn main() {
         }
         cli::Commands::Peers { path } => {
             let encoded_contents = std::fs::read(path).expect("failed to read");
-            let torrent: data::Torrent =
-                serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
-
-            let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(&encoded_info);
-            let ih = hasher.finalize();
-
+            let (torrent,ih) = get_torrent_and_info_hash(encoded_contents);
             let params = [
                 ("peer_id".to_owned(), "00112233445566778899".to_owned()),
                 ("port".to_owned(), "6881".to_owned()),
@@ -88,27 +75,15 @@ fn main() {
                     Err(e) => panic!("{:?}", e),
                 };
                 for chunk in tracker.peers.chunks(6) {
-                    let mut port = (chunk[4] as u16) << 8;
-                    port += chunk[5] as u16;
-                    println!(
-                        "Peer ip: {}.{}.{}.{}:{}",
-                        chunk[0], chunk[1], chunk[2], chunk[3], port
-                    );
-                    //println!("Peer port: {:?}",  get_peer_port(&chunk[4..]));
+                    let peer = data::Peer::new(chunk);
+                    println!("Peer: {}", peer.ip);
                 }
-                //eprintln!("Tracker {:?}",  tracker);
             }
         }
         cli::Commands::Handshake { path, ip_and_port } => {
             eprintln!(" torrent file='{}' , peer = {} on port {} ", path , ip_and_port[0] , ip_and_port[1]);
             let encoded_contents = std::fs::read(path).expect("failed to read");
-            let torrent: data::Torrent =
-                serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
-
-            let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
-            let mut hasher = sha1::Sha1::new();
-            hasher.update(&encoded_info);
-            let ih = hasher.finalize();
+            let (_,ih) = get_torrent_and_info_hash(encoded_contents);
             // start connection to client
             let header = b"\x13BitTorrent protocol\0\0\0\0\0\0\0\0";
             let peer =b"00112233445566778899"; 
@@ -126,6 +101,20 @@ fn main() {
                 eprint!("Failed to connect to peer")
             }
 
+        },
+        cli::Commands::DownloadPiece { output,path, index } => {
+            println!("Downloading piece {} of {} to {}", index, path, output);
         }
     }
+}
+
+fn get_torrent_and_info_hash(encoded_contents: Vec<u8>) -> (data::Torrent, sha1::digest::generic_array::GenericArray<u8, sha1::digest::typenum::UInt<sha1::digest::typenum::UInt<sha1::digest::typenum::UInt<sha1::digest::typenum::UInt<sha1::digest::typenum::UInt<sha1::digest::typenum::UTerm, sha1::digest::consts::B1>, sha1::digest::consts::B0>, sha1::digest::consts::B1>, sha1::digest::consts::B0>, sha1::digest::consts::B0>> ){
+    let torrent: data::Torrent =
+        serde_bencode::from_bytes(&encoded_contents).expect("bencode failed");
+
+    let encoded_info = serde_bencode::to_bytes(&torrent.info).expect("encode error");
+    let mut hasher = sha1::Sha1::new();
+    hasher.update(&encoded_info);
+    let ih = hasher.finalize();
+    (torrent,ih)
 }
