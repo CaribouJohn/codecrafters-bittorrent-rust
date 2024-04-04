@@ -1,4 +1,5 @@
 use bytes::BufMut;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder};
 
@@ -21,43 +22,27 @@ impl Handshake {
             peer_id: peer_id.as_bytes().try_into().ok().expect("Invalid peer id")
         }
     }
-}
 
-pub struct HandshakeMessageCodec;
+    pub async fn perform_handshake(&self, tokio_stream: &mut tokio::net::TcpStream) -> Handshake {
+        let mut buf = BytesMut::with_capacity(68);
+        buf.put_u8(19);
+        buf.put_slice(&self.protocol);
+        buf.put_slice(&self.reserved);
+        buf.put_slice(&self.info_hash);
+        buf.put_slice(&self.peer_id);
+        tokio_stream.write_all(&buf).await.expect("failed to write");
 
-impl Encoder<Handshake> for HandshakeMessageCodec {
-    type Error  = std::io::Error;
-
-    fn encode(&mut self, item: Handshake, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.put_u8(19);
-        dst.put_slice(&item.protocol);
-        dst.put_slice(&item.reserved);
-        dst.put_slice(&item.info_hash);
-        dst.put_slice(&item.peer_id);
-        Ok(())
-    }
-}
-
-impl Decoder for HandshakeMessageCodec {
-    type Item = Handshake;
-    type Error = std::io::Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() < 67 {
-            return Ok(None);
+        let mut response = [0; 68];
+        tokio_stream.read_exact(&mut response).await.expect("failed to read");
+        Handshake {
+            protocol: response[1..20].try_into().unwrap(),
+            reserved: response[20..28].try_into().unwrap(),
+            info_hash: response[28..48].try_into().unwrap(),
+            peer_id: response[48..68].try_into().unwrap(),
         }
-
-        let peer_id = &src[48..68];
-        let h = Handshake { 
-            protocol: src[1..20].try_into().ok().expect("Invalid protocol"), 
-            reserved: src[20..28].try_into().ok().expect("Invalid reserved"), 
-            info_hash: src[28..48].try_into().ok().expect("Invalid info hash"), 
-            peer_id: peer_id.try_into().ok().expect("Invalid peer id") 
-        };
-        src.advance(68);
-        Ok(Some(h))
     }
 }
+
 
 // Peer messages
 
