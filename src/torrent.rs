@@ -72,23 +72,23 @@ pub struct Info {
     pub pieces: Vec<u8>
 }
 
-impl Info {
+// impl Info {
 
-    pub fn new(length: usize, name: String, plen: usize, pieces: Vec<u8>) -> Self {
-        Self { length, name, plen, pieces }
-    }
+//     pub fn new(length: usize, name: String, plen: usize, pieces: Vec<u8>) -> Self {
+//         Self { length, name, plen, pieces }
+//     }
 
-    pub fn get_piece_count(&self) -> usize {
-        self.pieces.len() / 20
-    }
+//     pub fn get_piece_count(&self) -> usize {
+//         self.pieces.len() / 20
+//     }
 
-    pub fn get_piece(&self, index: usize) -> &[u8] {
-        let start = index * 20;
-        let end = start + 20;
-        &self.pieces[start..end]
-    }
+//     pub fn get_piece(&self, index: usize) -> &[u8] {
+//         let start = index * 20;
+//         let end = start + 20;
+//         &self.pieces[start..end]
+//     }
 
-}
+// }
 
 fn urlencode(t: &[u8]) -> String {
     let mut encoded = String::new();
@@ -144,7 +144,7 @@ impl Torrent {
         let res = reqwest::get(url).await.expect("failed to get tracker response");
         //eprintln!("resp: {:?}", res);
         let body = res.bytes().await.ok().expect("failed to get body"); 
-        eprintln!("body: {:?}", body);
+        //eprintln!("body: {:?}", body);
         let t : Tracker = serde_bencode::from_bytes(&body).expect("failed to decode");
         t
     }

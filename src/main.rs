@@ -1,9 +1,6 @@
 //use hex::encode;
 use clap::Parser;
-use sha1::{self, digest::block_buffer::Block, Digest};
-//use std::{io::{Read, Write}, net::TcpStream};
 use futures::{SinkExt, StreamExt};
-use tokio::net::TcpListener;
 use tokio_util::codec::Framed;
 
 mod bencode;
