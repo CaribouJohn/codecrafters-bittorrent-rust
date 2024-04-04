@@ -1,6 +1,7 @@
 //use hex::encode;
 use clap::Parser;
 use futures::{SinkExt, StreamExt};
+use tokio::io::AsyncWriteExt;
 use tokio_util::codec::Framed;
 
 mod bencode;
@@ -56,7 +57,7 @@ async fn main() {
                 .send(handshake)
                 .await
                 .expect("failed to send handshake");
-            
+
             let response = framer
                 .next()
                 .await
@@ -141,6 +142,14 @@ async fn main() {
             // let mut piece = vec![];
             let mut left = t.info.plen;
 
+            //open the "output" file for writing
+            let mut output_file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(output)
+                .await
+                .expect("failed to open file");
+
             while left > 0 {
 
                 let block_len = match left {
@@ -150,12 +159,12 @@ async fn main() {
                 } as u32;
 
                 //request piece
-                let request = peer_protocol::PeerMessage::Request {
+                let mut request = peer_protocol::PeerMessage::Request {
                     index : piece_index as u32,
                     begin: offset as u32,
                     length: block_len,
                 };
-                eprintln!("requesting piece: {} {} {}", index, offset, block_len);
+                eprintln!("requesting piece: {} {} {}", piece_index, offset, block_len);
                 peer_framer.send(request).await.expect("failed to send request");
                 
                 while let Some(msg) = peer_framer.next().await {
@@ -163,9 +172,12 @@ async fn main() {
                         Ok(pm) => match pm {
                             peer_protocol::PeerMessage::Piece { index, begin, block } => {
                                 eprintln!("got piece: {} {} {}", index, begin, block.len());
-                                left -= block.len();
-                                offset += block.len();
+                                left -= block_len as usize;
+                                offset += block_len as usize;
                                 piece_index += 1;
+
+                                // write block to file
+                                output_file.write(&block).await.expect("failed to write block");
                                 break;
                             }
                             _ => eprintln!("Ignoring: {:?}", pm),
@@ -173,7 +185,6 @@ async fn main() {
                         Err(e) => eprintln!("failed to get message: {:?}", e),
                     }
                 }            
-
             } 
 
 
