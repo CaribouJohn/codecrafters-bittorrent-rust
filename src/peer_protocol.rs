@@ -50,7 +50,13 @@ impl Decoder for HandshakeMessageCodec {
         let reserved = src.copy_to_bytes(8).to_vec();
         let info_hash = src.copy_to_bytes(20).to_vec();
         let peer_id = src.copy_to_bytes(20).to_vec();
-        Ok(Some(Handshake { protocol: protocol.try_into().ok().expect("Invalid protocol"), reserved: reserved.try_into().ok().expect("Invalid reserved"), info_hash: info_hash.try_into().ok().expect("Invalid info hash"), peer_id: peer_id.try_into().ok().expect("Invalid peer id") }))
+        eprintln!("peer_id = {:?}", peer_id);
+        Ok(Some(Handshake { 
+            protocol: protocol.try_into().ok().expect("Invalid protocol"), 
+            reserved: reserved.try_into().ok().expect("Invalid reserved"), 
+            info_hash: info_hash.try_into().ok().expect("Invalid info hash"), 
+            peer_id: peer_id.try_into().ok().expect("Invalid peer id") 
+        }))
     }
 }
 
