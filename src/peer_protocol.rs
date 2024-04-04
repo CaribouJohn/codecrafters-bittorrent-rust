@@ -128,8 +128,6 @@ impl Decoder for PeerMessageCodec {
     type Error = std::io::Error;
 
     fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        // eprintln!("buf.len() = {}", buf.len());
-        // eprintln!("buf = {:?}", buf);
         if buf.len() < 4 {
             return Ok(None);
         }

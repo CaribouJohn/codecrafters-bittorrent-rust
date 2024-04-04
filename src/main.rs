@@ -1,3 +1,5 @@
+use core::panic;
+
 //use hex::encode;
 use clap::Parser;
 use futures::{SinkExt, StreamExt};
@@ -102,6 +104,8 @@ async fn main() {
                 .send(peer_protocol::PeerMessage::Interested)
                 .await
                 .expect("failed to send interested");
+
+
             while let Some(msg) = peer_framer.next().await {
                 match msg {
                     Ok(pm) => match pm {
@@ -116,11 +120,27 @@ async fn main() {
             }
 
             // we want to get 1..n pieces
-            let mut piece_index = 0;
+            let piece_index = index as usize;
             let mut offset = 0;
             let block_size = 16384;
-            // let mut piece = vec![];
-            let mut left = t.info.plen;
+            let mut left = t.info.plen; // length of piece
+            
+            //if the piece is the last piece, the length may be less than the piece length
+            if (piece_index + 1)  * t.info.plen > t.info.length {
+                left = (t.info.length).rem_euclid(t.info.plen) as usize;
+            }
+            
+
+
+            // println!("File: {}", t.info.name);
+            // println!("length: {}", t.info.length);
+            // println!("piece length: {}", t.info.plen);
+            // for chunk in t.info.pieces.chunks(20) {
+            //     let h = hex::encode(chunk);
+            //     println!("{}", h);
+            // }
+
+
 
             //open the "output" file for writing
             let mut output_file = tokio::fs::OpenOptions::new()
@@ -130,12 +150,11 @@ async fn main() {
                 .await
                 .expect("failed to open file");
 
+            //we want to keep tabs on the number of bytes left to download
             while left > 0 {
-                let block_len = match left {
-                    x if x > block_size => block_size,
-                    x if x <= block_size => x,
-                    _ => 0,
-                } as u32;
+
+                let block_len =  left.min(block_size) as u32; //either block size or remainder of piece
+                //eprintln!("left: {} next: {}", left, block_len);
 
                 //request piece
                 let request = peer_protocol::PeerMessage::Request {
@@ -144,36 +163,44 @@ async fn main() {
                     length: block_len,
                 };
                 eprintln!("requesting piece: {} {} {}", piece_index, offset, block_len);
-                peer_framer
-                    .send(request)
-                    .await
-                    .expect("failed to send request");
-
-                while let Some(msg) = peer_framer.next().await {
-                    match msg {
-                        Ok(pm) => match pm {
-                            peer_protocol::PeerMessage::Piece {
-                                index,
-                                begin,
-                                block,
-                            } => {
-                                eprintln!("got piece: {} {} {}", index, begin, block.len());
-                                left -= block_len as usize;
-                                offset += block_len as usize;
-                                piece_index += 1;
-
-                                // write block to file
-                                output_file
-                                    .write(&block)
-                                    .await
-                                    .expect("failed to write block");
-                                break;
-                            }
-                            _ => eprintln!("Ignoring: {:?}", pm),
-                        },
-                        Err(e) => eprintln!("failed to get message: {:?}", e),
+                match peer_framer.send(request).await {
+                    Ok(_) => eprintln!("sent request"),
+                    Err(e) => {
+                        eprintln!("failed to send request: {:?}", e);
+                        panic!("failed to send request");
                     }
                 }
+
+                match peer_framer.next().await {
+                    Some(Ok(peer_protocol::PeerMessage::Piece {
+                        index,
+                        begin,
+                        block,
+                    })) => {
+                        eprintln!("got piece: {} {} {}", index, begin, block.len());
+                        left -= block_len as usize;
+                        offset += block_len as usize;
+                        //piece_index += 1;
+
+                        // write block to file
+                        output_file
+                            .write(&block)
+                            .await
+                            .expect("failed to write block");
+                    }
+                    Some(Ok(v)) => {
+                        eprintln!("Ignoring: {:?}", v);
+                        //panic!("failed to get piece");
+                    }
+                    Some(Err(e)) => {
+                        eprintln!("failed to get message: {:?}", e);
+                        panic!("failed to get piece");
+                    }
+                    None => {
+                        eprintln!("no message ");
+                        break;
+                    }
+                };
             }
             println!("Piece {} downloaded to {}.", index, &output);
         }

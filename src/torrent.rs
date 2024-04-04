@@ -62,7 +62,7 @@ impl Iterator for PeerIterator {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Info {
     pub length : usize,
     pub name: String,
@@ -100,7 +100,7 @@ fn urlencode(t: &[u8]) -> String {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug,Serialize, Deserialize)]
 pub struct Torrent {
     pub announce : String,
     pub info : Info
