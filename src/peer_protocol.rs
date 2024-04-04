@@ -43,17 +43,15 @@ impl Decoder for HandshakeMessageCodec {
     type Error = std::io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() < 67 {
+        if src.len() < 68 {
             return Ok(None);
         }
-        let protocol = src.copy_to_bytes(19).to_vec();
-        let reserved = src.copy_to_bytes(8).to_vec();
-        let info_hash = src.copy_to_bytes(20).to_vec();
-        let peer_id = src.copy_to_bytes(20).to_vec();
+
+        let peer_id = &src[48..68];
         Ok(Some(Handshake { 
-            protocol: protocol.try_into().ok().expect("Invalid protocol"), 
-            reserved: reserved.try_into().ok().expect("Invalid reserved"), 
-            info_hash: info_hash.try_into().ok().expect("Invalid info hash"), 
+            protocol: src[1..20].try_into().ok().expect("Invalid protocol"), 
+            reserved: src[20..28].try_into().ok().expect("Invalid reserved"), 
+            info_hash: src[28..48].try_into().ok().expect("Invalid info hash"), 
             peer_id: peer_id.try_into().ok().expect("Invalid peer id") 
         }))
     }
