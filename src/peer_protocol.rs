@@ -185,7 +185,7 @@ impl Decoder for PeerMessageCodec {
     }
 }
 
-pub async fn download_piece(t: &Torrent, tokio_stream: &mut tokio::net::TcpStream, index: usize, output : &String) -> Vec<u8> {
+pub async fn download_piece(t: &Torrent, tokio_stream: &mut tokio::net::TcpStream, index: usize) -> Vec<u8> {
     let mut piece_vector : Vec<u8> = Vec::new();
 
     let mut peer_framer = Framed::new(tokio_stream, PeerMessageCodec);
@@ -194,7 +194,7 @@ pub async fn download_piece(t: &Torrent, tokio_stream: &mut tokio::net::TcpStrea
         match msg {
             Ok(pm) => match pm {
                 PeerMessage::Bitfield(bf) => {
-                    //eprintln!("got bitfield: {:?}", bf);
+                    eprintln!("got bitfield: {:?}", bf);
                     break;
                 }
                 _ => eprintln!("Ignoring: {:?}", pm),

@@ -88,7 +88,7 @@ async fn main() {
             .open(&output)
             .await
             .expect("failed to open file");
-            let piece = peer_protocol::download_piece(&t, &mut stream, index, &output).await;
+            let piece = peer_protocol::download_piece(&t, &mut stream, index).await;
 
             output_file.write_all(&piece).await.expect("failed to write to file");
 
@@ -125,7 +125,7 @@ async fn main() {
                 let h = handshake.perform_handshake(&mut tokio_stream).await;
                 eprintln!("Peer ID: {}", hex::encode(&h.peer_id));
 
-                let piece = peer_protocol::download_piece(&t, &mut tokio_stream, index, &output).await;
+                let piece = peer_protocol::download_piece(&t, &mut tokio_stream, index).await;
                 
                 //calculate the piece hash
                 let piece_hash = sha1::Sha1::digest(&piece);
