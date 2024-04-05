@@ -1,10 +1,8 @@
-use core::panic;
 
 //use hex::encode;
 use clap::Parser;
-use futures::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
-use tokio_util::codec::Framed;
+use sha1::{self, Digest};
 
 mod bencode;
 mod cli;
@@ -83,126 +81,79 @@ async fn main() {
             eprintln!("Peer ID: {}", hex::encode(&h.peer_id));
 
             eprintln!("starting peer message protocol");
-
-            let mut peer_framer = Framed::new(stream, peer_protocol::PeerMessageCodec);
-            while let Some(msg) = peer_framer.next().await {
-                eprintln!("got message: {:?}", msg);
-                match msg {
-                    Ok(pm) => match pm {
-                        peer_protocol::PeerMessage::Bitfield(bf) => {
-                            eprintln!("got bitfield: {:?}", bf);
-                            break;
-                        }
-                        _ => eprintln!("Ignoring: {:?}", pm),
-                    },
-                    Err(e) => eprintln!("failed to get message: {:?}", e),
-                }
-            }
-
-            // send interested
-            peer_framer
-                .send(peer_protocol::PeerMessage::Interested)
-                .await
-                .expect("failed to send interested");
-
-
-            while let Some(msg) = peer_framer.next().await {
-                match msg {
-                    Ok(pm) => match pm {
-                        peer_protocol::PeerMessage::Unchoke => {
-                            eprintln!("got unchoke");
-                            break;
-                        }
-                        _ => eprintln!("Ignoring: {:?}", pm),
-                    },
-                    Err(e) => eprintln!("failed to get message: {:?}", e),
-                }
-            }
-
-            // we want to get 1..n pieces
-            let piece_index = index as usize;
-            let mut offset = 0;
-            let block_size = 16384;
-            let mut left = t.info.plen; // length of piece
-            
-            //if the piece is the last piece, the length may be less than the piece length
-            if (piece_index + 1)  * t.info.plen > t.info.length {
-                left = (t.info.length).rem_euclid(t.info.plen) as usize;
-            }
-            
-
-
-            // println!("File: {}", t.info.name);
-            // println!("length: {}", t.info.length);
-            // println!("piece length: {}", t.info.plen);
-            // for chunk in t.info.pieces.chunks(20) {
-            //     let h = hex::encode(chunk);
-            //     println!("{}", h);
-            // }
-
-
-
-            //open the "output" file for writing
+                //open the "output" file for writing
             let mut output_file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&output)
+            .await
+            .expect("failed to open file");
+            let piece = peer_protocol::download_piece(&t, &mut stream, index, &output).await;
+
+            output_file.write_all(&piece).await.expect("failed to write to file");
+
+            println!("Piece {} downloaded to {}.", index, &output);
+        },
+        cli::Commands::Download { output, path } => {
+            println!("Downloading {} to {}", path, output);
+            let t = torrent::Torrent::load_torrent(path);
+            let handshake =
+                peer_protocol::Handshake::new(t.get_info_hash(), "00112233445566778899");
+
+            //use first peer
+            let peer = t
+                .request_tracker("00112233445566778899".to_owned())
+                .await
+                .into_iter()
+                .next()
+                .expect("no peers");
+            eprintln!("connecting to peer: {}", peer.ip);
+
+
+            println!("File: {}", t.info.name);
+            println!("length: {}", t.info.length);
+            println!("piece length: {}", t.info.plen);
+
+            let mut index = 0;
+            for chunk in t.info.pieces.chunks(20) {
+                let check = hex::encode(chunk);
+
+                let mut tokio_stream = tokio::net::TcpStream::connect(&peer.ip)
+                .await
+                .expect("failed to connect");
+
+                let h = handshake.perform_handshake(&mut tokio_stream).await;
+                eprintln!("Peer ID: {}", hex::encode(&h.peer_id));
+
+                let piece = peer_protocol::download_piece(&t, &mut tokio_stream, index, &output).await;
+                
+                //calculate the piece hash
+                let piece_hash = sha1::Sha1::digest(&piece);
+                let piece_hash_hex = hex::encode(piece_hash);
+                //eprintln!("{} == {}", piece_hash_hex , check);
+                assert_eq!(piece_hash_hex, check);
+
+                //append the piece to the output file
+                let mut output_file = tokio::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
+                .append(true)
                 .open(&output)
                 .await
                 .expect("failed to open file");
+                output_file.write_all(&piece).await.expect("failed to write to file");
 
-            //we want to keep tabs on the number of bytes left to download
-            while left > 0 {
+                println!("Piece {} downloaded to {}.", index, &output);
 
-                let block_len =  left.min(block_size) as u32; //either block size or remainder of piece
-                //eprintln!("left: {} next: {}", left, block_len);
+                output_file.flush().await.expect("failed to flush");
 
-                //request piece
-                let request = peer_protocol::PeerMessage::Request {
-                    index: piece_index as u32,
-                    begin: offset as u32,
-                    length: block_len,
-                };
-                eprintln!("requesting piece: {} {} {}", piece_index, offset, block_len);
-                match peer_framer.send(request).await {
-                    Ok(_) => eprintln!("sent request"),
-                    Err(e) => {
-                        eprintln!("failed to send request: {:?}", e);
-                        panic!("failed to send request");
-                    }
-                }
 
-                match peer_framer.next().await {
-                    Some(Ok(peer_protocol::PeerMessage::Piece {
-                        index,
-                        begin,
-                        block,
-                    })) => {
-                        eprintln!("got piece: {} {} {}", index, begin, block.len());
-                        left -= block_len as usize;
-                        offset += block_len as usize;
-                        //piece_index += 1;
-
-                        // write block to file
-                        output_file
-                            .write(&block)
-                            .await
-                            .expect("failed to write block");
-                    }
-                    Some(Ok(v)) => {
-                        eprintln!("Ignoring: {:?}", v);
-                        //panic!("failed to get piece");
-                    }
-                    Some(Err(e)) => {
-                        eprintln!("failed to get message: {:?}", e);
-                        panic!("failed to get piece");
-                    }
-                    None => {
-                        eprintln!("no message ");
-                        break;
-                    }
-                };
+                index += 1;
+                tokio_stream.shutdown().await.expect("failed to shutdown");
             }
-            println!("Piece {} downloaded to {}.", index, &output);
+
+
         }
+            
     }
 }

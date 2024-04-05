@@ -27,6 +27,10 @@ pub enum Commands {
         path:String,
         index:usize,
     },
-
+    Download {
+        #[arg(short, long)]
+        output:String,
+        path:String,
+    }
     
 }

@@ -1,7 +1,10 @@
 use bytes::BufMut;
+use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::bytes::{Buf, BytesMut};
-use tokio_util::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder, Framed};
+
+use crate::torrent::Torrent;
 
 #[derive(Debug)]
 pub struct Handshake {
@@ -182,6 +185,108 @@ impl Decoder for PeerMessageCodec {
     }
 }
 
+pub async fn download_piece(t: &Torrent, tokio_stream: &mut tokio::net::TcpStream, index: usize, output : &String) -> Vec<u8> {
+    let mut piece_vector : Vec<u8> = Vec::new();
+
+    let mut peer_framer = Framed::new(tokio_stream, PeerMessageCodec);
+    while let Some(msg) = peer_framer.next().await {
+        //eprintln!("got message: {:?}", msg);
+        match msg {
+            Ok(pm) => match pm {
+                PeerMessage::Bitfield(bf) => {
+                    //eprintln!("got bitfield: {:?}", bf);
+                    break;
+                }
+                _ => eprintln!("Ignoring: {:?}", pm),
+            },
+            Err(e) => eprintln!("failed to get message: {:?}", e),
+        }
+    }
+
+    // send interested
+    peer_framer
+        .send(PeerMessage::Interested)
+        .await
+        .expect("failed to send interested");
+
+
+    while let Some(msg) = peer_framer.next().await {
+        match msg {
+            Ok(pm) => match pm {
+                PeerMessage::Unchoke => {
+                    eprintln!("got unchoke");
+                    break;
+                }
+                _ => eprintln!("Ignoring: {:?}", pm),
+            },
+            Err(e) => eprintln!("failed to get message: {:?}", e),
+        }
+    }
+
+    // we want to get 1..n pieces
+    let piece_index = index as usize;
+    let mut offset = 0;
+    let block_size = 16384;
+    let mut left = t.info.plen; // length of piece
+    
+    //if the piece is the last piece, the length may be less than the piece length
+    if (piece_index + 1)  * t.info.plen > t.info.length {
+        left = (t.info.length).rem_euclid(t.info.plen) as usize;
+    }
+
+    //we want to keep tabs on the number of bytes left to download
+    while left > 0 
+    {
+
+        let block_len =  left.min(block_size) as u32; //either block size or remainder of piece
+        //eprintln!("left: {} next: {}", left, block_len);
+
+        //request piece
+        let request = PeerMessage::Request {
+            index: piece_index as u32,
+            begin: offset as u32,
+            length: block_len,
+        };
+        eprintln!("requesting piece: {} {} {}", piece_index, offset, block_len);
+        match peer_framer.send(request).await {
+            Ok(_) => eprintln!("sent request"),
+            Err(e) => {
+                eprintln!("failed to send request: {:?}", e);
+                panic!("failed to send request");
+            }
+        }
+
+        match peer_framer.next().await {
+            Some(Ok(PeerMessage::Piece {
+                index,
+                begin,
+                block,
+            })) => {
+                eprintln!("got piece: {} {} {}", index, begin, block.len());
+                left -= block_len as usize;
+                offset += block_len as usize;
+                //piece_index += 1;
+
+                //append block to piece vector
+                piece_vector.extend_from_slice(&block);
+
+            }
+            Some(Ok(v)) => {
+                eprintln!("Ignoring: {:?}", v);
+                //panic!("failed to get piece");
+            }
+            Some(Err(e)) => {
+                eprintln!("failed to get message: {:?}", e);
+                panic!("failed to get piece");
+            }
+            None => {
+                eprintln!("no message ");
+                break;
+            }
+        };
+    }
+    piece_vector
+}
 
 
 
